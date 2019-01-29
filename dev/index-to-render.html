@@ -1,0 +1,410 @@
+---
+title: "Untitled"
+output: md_document
+---
+
+
+
+<p>To be honest, I planned on writing a review of this past weekend’s
+<a href="https://resources.rstudio.com/rstudio-conf-2019">rstudio::conf 2019</a>,
+but several other people have already done a great job
+of doing that—just check out
+<a href="https://github.com/kbroman/RStudioConf2019Slides">Karl Broman’s aggreggation of reviews at the bottom of the page here</a>!
+(More on this in a second.)
+In short, my thoughts on the whole experience are captured perfectly by
+<a href="http://nickstrayer.me/">Nick Strayer</a>’s tweet the day after the conference ended.</p>
+<p>{{&lt; tweet 1086681100787822592 &gt;}}</p>
+<p>Anyways, I figured that this was the perfect opportunity to do some
+<a href="https://www.tidytextmining.com/">“tidy text analysis”</a>!
+Why not extract the text
+from the reviews of others—linked in Karl’s repo—and
+make “my own” summary of the event? Plotting
+word frequencies and sentiments, while not exactly “cutting edge”
+compared to robust <a href="https://en.wikipedia.org/wiki/Neuro-linguistic_programming">NLP</a> techniques, is perfect for getting a nice, simple overview of the conference.
+(I have applied some of the techniques described by
+<a href="http://varianceexplained.org/">David Robinson</a> and
+<a href="https://juliasilge.com/blog">Julia Silge</a> in their
+<a href="https://www.tidytextmining.com/"><em>Tidy Text Mining with R</em> book</a>
+<a href="/post/tidy-text-analysis-google-search-history">more than once</a>
+<a href="/post/tidy-text-analysis-rweekly">in the past</a>, but not recently,
+and not on this topic.)</p>
+<p>Moreoever, after reading
+<a href="https://rud.is/b/2019/01/21/hrbrthemes-0-6-0-on-cran-other-in-development-package-news/">Bob Rudis’s recent post</a> and discovering his work-in-progress
+" <code>{curl}</code> +<code>{httr}</code> + <code>{rvest}</code>" package called
+<a href="https://git.sr.ht/~hrbrmstr/reapr"><code>{reapr}</code></a>, I realized that the work
+of cleaning the HTML and text for each person’s blog post would not be
+so bad. In fact, it turned out to be as easy as
+<code>reapr::reap_url() %&gt;% reapr::mill()</code>
+(with only a little bit of extra work :smile:)!</p>
+<p>After trying a couple of different approaches
+(e.g. bigrams, topic modeling, etc.) and experimenting with some different
+visualizations, I ended up making the two plots below.
+(To the interested reader, I’ve included all of the code at the bottom of this post.)
+From the second plot—where positive sentiment heavily outweighs negative
+sentiment—one thing is clear: the <code>R</code> community is
+<strong>super supportive and positive</strong>,
+just as Nick alluded to in his tweet.</p>
+<p><img src="viz_top_n-1.png" /> <img src="viz_sentiments-1.png" /></p>
+<p>I’ve said it before and I’ll happily said it again:
+thanks again to David Robinson and Julia Silge for their great
+<a href="https://www.tidytextmining.com/"><em>Tidy Text Mining with R</em> book</a>
+and everything else that they’ve done for the community!
+The techniques that they’ve documented and shared are super
+helpful for doing a quick exploration just like this.</p>
+<pre class="r"><code># Reference for adding appendix: https://yihui.name/en/2018/09/code-appendix/
+DIR_POST &lt;- &quot;content/post/rstudio-conf-2019-summary&quot;
+PATH_SANS_EXT &lt;- &quot;index-to-render&quot;
+PATH_RMD &lt;- file.path(DIR_POST, paste0(PATH_SANS_EXT, &quot;.Rmd&quot;))
+PATH_OUTPUT &lt;- file.path(DIR_POST, paste0(PATH_SANS_EXT, &quot;.md&quot;))
+
+# PATH_R &lt;- paste0(PATH_SANS_EXT, &quot;.R&quot;)
+# rmarkdown::render(knitr::spin(PATH_R, knit = FALSE))
+
+# # Spell-checking.
+# spelling::spell_check_files(PATH_RMD)
+
+# # Convert from Rmd to output specified in YAML.
+# rmarkdown::render(PATH_RMD, output_file = PATH_OUTPUT, output_dir = DIR_POST, knit_root_dir = DIR_POST, intermediates_dir = DIR_POST)
+# rmarkdown::render(PATH_RMD)
+# rmarkdown::render(PATH_RMD, output_file = PATH_OUTPUT)
+
+knitr::opts_knit$set(root.dir = here::here(DIR_POST))
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  include = FALSE,
+  fig.show = &quot;hide&quot;,
+  fig.align = &quot;center&quot;,
+  fig.width = 4.5,
+  fig.asp = 1.5,
+  warning = FALSE,
+  message = FALSE
+)
+library(&quot;tidyverse&quot;)
+library(&quot;teplot&quot;)
+# library(&quot;hrbrthemes&quot;)
+# theme_set(teplot::theme_te())
+url &lt;- &quot;https://github.com/kbroman/RStudioConf2019Slides/blob/master/ReadMe.md&quot;
+page &lt;- url %&gt;% reapr::reap_url()
+
+nodes_p &lt;- page$parsed_html %&gt;%  rvest::html_nodes(&quot;p&quot;) 
+# nodes_p %&gt;% rev() %&gt;% magrittr::extract(1:20)
+
+extract_nodes_after &lt;- function(x, pattern) {
+  stopifnot(class(x) == &quot;xml_nodeset&quot;)
+  text &lt;- rvest::html_text(x)
+  mask &lt;- str_detect(text, pattern)
+  mask &lt;- dplyr::cumany(mask)
+  x[mask]
+}
+
+nodes_blogposts &lt;-
+  nodes_p %&gt;%
+  extract_nodes_after(&quot;^Jacqueline Nolis&quot;)
+
+str_subset_inv &lt;- function(string, pattern, invert = TRUE) {
+  setdiff(string, str_subset(string, pattern))
+}
+
+extract_nodes_without &lt;- function(x, pattern) {
+  stopifnot(class(x) == &quot;xml_nodeset&quot;)
+  text &lt;- rvest::html_text(x)
+  res &lt;- str_subset_inv(text, pattern)
+  res
+}
+
+# nodes_blogposts %&gt;% rvest::html_text()
+# nodes_blogposts %&gt;% rvest::html_nodes(&quot;a&quot;) %&gt;% rvest::html_text()
+
+links &lt;-
+  nodes_blogposts %&gt;% 
+  rvest::html_nodes(&quot;a&quot;) %&gt;% 
+  rvest::html_attr(&quot;href&quot;) %&gt;% 
+  str_subset_inv(&quot;twitter|reources&quot;)
+
+mdtext &lt;- nodes_blogposts %&gt;% rvest::html_text()  
+authors &lt;- mdtext %&gt;% str_extract(&quot;(^[^,]+)&quot;)
+# titles &lt;- mdtext %&gt;% str_replace(&quot;(^.*)\\,[\\s\\n]+(.*$)&quot;, &quot;\\2&quot;)
+
+blogposts &lt;-
+  tibble(
+    idx_blog = seq.int(1L, length(authors)),
+    author = authors,
+    link = links
+  )
+blogposts
+
+# Exclude Nolis and Lopp due to difficulty with Medium articles.
+# Exclude Cortina because it is an &quot;analysis&quot; type of article.
+# Exclude Nantz because it is just a description of a podcast.
+blogposts_filt &lt;-
+  blogposts %&gt;% 
+  filter(!str_detect(author, &quot;Nolis|Lopp|Cortina|Nantz&quot;))
+
+blogposts_content &lt;-
+  blogposts_filt %&gt;% 
+  mutate(content = purrr::map(link, ~reapr::reap_url(.x) %&gt;% reapr::mill()))
+blogposts_content
+# content1 &lt;-
+#   blogposts %&gt;%
+#   slice(2) %&gt;%
+#   pull(link) %&gt;%
+#   reapr::reap_url() %&gt;%
+#   reapr::mill()
+# 
+# tokens1 &lt;-
+#   content1 %&gt;% 
+#   str_split(&quot;\\n&quot;) %&gt;% 
+#   enframe(name = &quot;line&quot;, value = &quot;text&quot;) %&gt;% 
+#   unnest() %&gt;% 
+#   # Still some empty lines to remove.
+#   filter(text != &quot;&quot;) %&gt;% 
+#   # tidytext::unnest_tokens(output = &quot;word&quot;, text)
+#   tidytext::unnest_tokens(output = &quot;ngram&quot;, input = text, token = &quot;ngrams&quot;, n = 3)
+# tokens1
+tidy_1post &lt;-
+  function(text) {
+    text %&gt;%
+      str_split(&quot;\\n&quot;) %&gt;% 
+      enframe(name = &quot;line&quot;, value = &quot;text&quot;) %&gt;% 
+      unnest() %&gt;% 
+      # Still some empty lines to remove.
+      filter(text != &quot;&quot;) %&gt;% 
+      # For unigrams.
+      tidytext::unnest_tokens(output = &quot;word&quot;, input = text)
+    # For bigrams.
+      # tidytext::unnest_tokens(output = &quot;ngram&quot;, input = text, token = &quot;ngrams&quot;, n = 2)
+  }
+
+posts_tokenized &lt;-
+  blogposts_content %&gt;%
+  select(-link) %&gt;% 
+  mutate(tokens = purrr::map(content, tidy_1post))
+posts_tokenized
+tokens &lt;-
+  posts_tokenized %&gt;%
+  select(author, tokens) %&gt;% 
+  unnest(tokens)
+tokens
+
+stopwords_base &lt;- tidytext::get_stopwords()
+# stopwords_base &lt;- tidytext::get_stopwords(source = &quot;smart&quot;)
+
+# Remove the numbers used for ordered lists as well as html-related things
+# (mostly from Medium posts?).
+stopwords_custom &lt;-
+  as.character(0:9) %&gt;%
+  # c(
+  #   &quot;https&quot;,
+  #   &quot;url&quot;,
+  #   &quot;href&quot;,
+  #   &quot;httpstatus&quot;,
+  #   &quot;alts&quot;,
+  #   &quot;anchortype&quot;,
+  #   &quot;rel&quot;,
+  #   &quot;github.com&quot;,
+  #   &quot;200&quot;,
+  #   &quot;markups&quot;,
+  #   &quot;name&quot;,
+  #   &quot;text&quot;,
+  #   &quot;title&quot;,
+  #   &quot;type&quot;,
+  #   &quot;start&quot;,
+  #   &quot;end&quot;,
+  #   &quot;originalwidth&quot;,
+  #   &quot;originalheight&quot;,
+  #   &quot;true&quot;,
+  #   &quot;false&quot;,
+  #   &quot;id&quot;
+  # ) %&gt;%
+  tibble(word = .)
+
+stopwords &lt;-
+  bind_rows(stopwords_base, stopwords_custom)
+
+tokens %&gt;%
+  count(word, sort = TRUE)
+tokens %&gt;%
+  anti_join(stopwords) %&gt;% 
+  count(author, word, sort = TRUE)
+
+# # If `ngram` is a bigram, then...
+# tokens_filt &lt;- 
+#   tokens %&gt;%
+#   separate(ngram, into = c(paste0(&quot;word&quot;, 1:2)), remove = FALSE) %&gt;% 
+#   anti_join(stopwords, by = c(&quot;word1&quot; = &quot;word&quot;)) %&gt;% 
+#   anti_join(stopwords, by = c(&quot;word2&quot; = &quot;word&quot;))
+# tokens_filt
+
+tokens_filt &lt;- 
+  tokens %&gt;%
+  anti_join(stopwords)
+tokens_filt
+theme_custom &lt;- function() { 
+  teplot::theme_te(base_size = 12) +
+    theme(panel.grid.major.y = element_blank())
+}
+lab_title_suffix &lt;- &quot;in blog post reviews of rstudio::conf 2019.&quot;
+lab_caption &lt;- &quot;By Tony ElHabr&quot;
+
+tokens_filt_n &lt;-
+  tokens_filt %&gt;% 
+  count(word, sort = TRUE)
+
+viz_top_n &lt;-
+  tokens_filt_n %&gt;% 
+  top_n(20, n) %&gt;% 
+  mutate(word = reorder(word, n)) %&gt;%
+  ggplot(aes(x = word, y = n)) +
+  geom_col(fill = &quot;grey50&quot;) +
+  coord_flip() +
+  theme_custom()  +
+  labs(
+    x = NULL,
+    y = &quot;word Count&quot;,
+    title = sprintf(&quot;Most frequently used words\n%s&quot;, lab_title_suffix),
+    subtitle = &quot;Unsuprisingly, words like `r`, `rstudio`, and `data`\nare most prominent.&quot;,
+    caption = lab_caption 
+  )
+viz_top_n
+
+# teproj::export_ext_png(
+#   viz_top_n, 
+#   # dir = DIR_POST,
+#   units = &quot;in&quot;,
+#   height = 8,
+#   width = 4.5
+# )
+# sentiments_bing &lt;- tidytext::get_sentiments(&quot;bing&quot;)
+sentiments_afinn &lt;- tidytext::get_sentiments(&quot;afinn&quot;)
+# Reference: http://r-statistics.co/Top50-Ggplot2-Visualizations-MasterList-R-Code.html#Lollipop%20Chart
+# pal2 &lt;- c(&quot;positive&quot; = &quot;#00ba38&quot;, &quot;negative&quot; = &quot;#f8766d&quot;)
+
+# # If `ngram` is a bigram...
+# tokens_filt %&gt;%
+#   left_join(sentiments_afinn %&gt;% rename_all(funs(paste0(., &quot;1&quot;)))) %&gt;% 
+#   left_join(sentiments_afinn %&gt;% rename_all(funs(paste0(., &quot;2&quot;)))) %&gt;% 
+#   mutate_at(vars(matches(&quot;score&quot;)), funs(coalesce(., 0L, .))) %&gt;% 
+#   mutate(n = score1 + score2) %&gt;% 
+#   top_n(20, n) %&gt;% 
+#   ggplot(aes(x = ngram, y = n)) + ...
+
+viz_sentiments &lt;-
+  tokens_filt %&gt;%
+  # inner_join(sentiments_bing) %&gt;% 
+  # count(word, sentiment, sort = TRUE) %&gt;% 
+  # top_n(20, n) %&gt;% 
+  # mutate_at(vars(word), funs(reorder(.,  n))) %&gt;% 
+  # ggplot(aes(x = word, y = n, fill = sentiment)) +
+  inner_join(sentiments_afinn) %&gt;% 
+  group_by(word) %&gt;% 
+  summarise(.n = n(), .sum = sum(score)) %&gt;% 
+  ungroup() %&gt;% 
+  mutate(sentiment = if_else(.sum &gt;= 0, &quot;positive&quot;, &quot;negative&quot;)) %&gt;% 
+  top_n(30, abs(.sum)) %&gt;%
+  mutate_at(vars(word), funs(reorder(.,  .sum))) %&gt;% 
+  ggplot(aes(x = word, y = .sum, fill = sentiment)) +
+  scale_fill_manual(values = c(&quot;negative&quot; = &quot;grey20&quot;, &quot;positive&quot; = &quot;grey70&quot;)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  theme_custom() +
+  labs(
+    x = NULL,
+    y = &quot;AFINN polarity score&quot;,
+    title = sprintf(&quot;Words contributing most to sentiment\n%s&quot;, lab_title_suffix),
+    subtitle = &quot;The content is MUCH more positve than negative.&quot;,
+    caption = lab_caption
+  )
+viz_sentiments
+
+# teproj::export_ext_png(
+#   viz_sentiments, 
+#   # dir = DIR_POST,
+#   units = &quot;in&quot;,
+#   height = 8,
+#   width = 4.5
+# )
+# stopwords_custom_topics &lt;-
+#   c(
+#     &quot;r&quot;,
+#     &quot;rstudio&quot;,
+#     &quot;data&quot;,
+#     &quot;science&quot;,
+#     &quot;conference&quot;,
+#     &quot;conf&quot;,
+#     &quot;talk&quot;,
+#     &quot;talks&quot;,
+#     &quot;2019&quot;
+#   ) %&gt;%
+#   tibble(word = .)
+# 
+# dtms &lt;-
+#   tokens_filt %&gt;% 
+#   anti_join(stopwords_custom_topics) %&gt;% 
+#   count(author, word) %&gt;% 
+#   tidytext::cast_dfm(author, word, n)
+# 
+# topics &lt;- dtms %&gt;% stm::stm(K = 4, verbose = FALSE, init.type = &quot;Spectral&quot;)
+# topics
+# topics_betas &lt;- topics %&gt;% broom::tidy()
+# topics_betas %&gt;% 
+#   group_by(topic) %&gt;%
+#   top_n(2, beta) %&gt;% 
+#   arrange(desc(beta)) %&gt;% 
+#   head(30)
+# 
+# topics_betas_top_n &lt;-
+#   topics_betas %&gt;%
+#   group_by(topic) %&gt;% 
+#   top_n(100, beta)
+# topics_betas_top_n %&gt;% 
+#   spread(topic, beta) %&gt;% 
+#   filter_all(all_vars(!is.na(.)))
+# 
+# viz_topics &lt;-
+#   topics_betas %&gt;%
+#   group_by(topic) %&gt;%
+#   top_n(10, beta) %&gt;%
+#   ungroup() %&gt;%
+#   mutate(
+#     topic = paste0(&quot;Topic &quot;, topic),
+#     term = tidytext::reorder_within(term, beta, topic)
+#   ) %&gt;%
+#   ggplot(aes(term, beta, fill = as.factor(topic))) +
+#   geom_col(show.legend = FALSE) +
+#   facet_wrap(~ topic, scales = &quot;free_y&quot;) +
+#   coord_flip() +
+#   tidytext::scale_x_reordered() +
+#   theme_custom() +
+#   theme(axis.text.x = element_blank()) +
+#   labs(
+#     x = NULL,
+#     y = &quot;Beta probability of ngram belonging to topic&quot;,
+#     title = sprintf(&quot;Major \&quot;latent\&quot; topics and associated words discussed\n%s&quot;, lab_title_suffix),
+#     subtitle = &quot;Although the topics themselves aren&#39;t clear, it&#39;s clear that\n`shiny`, `production`, `community`, and `packages` were major focal points.&quot;,
+#     caption = lab_caption
+#   )
+# viz_topics
+# Just to help myself out... DEFINITELY NOT a &quot;best practice&quot;.
+DIR_VIZ &lt;- file.path(DIR_POST, &quot;index-to-render_files&quot;, &quot;figure-markdown_strict&quot;)
+..file_copy &lt;-
+  function(file_from,
+           file_to = file_from,
+           dir_from = DIR_VIZ,
+           dir_to = DIR_POST) {
+    invisible(file.copy(
+      from = file.path(dir_from, file_from),
+      to = file.path(dir_to, file_to),
+      overwrite = TRUE
+    ))
+  }
+.file_copy &lt;- function(file_from, ...) {
+  ..file_copy(file_from = file_from, ...)
+}
+.file_copy_rename &lt;-
+  function(file_from, file_to = &quot;featured.jpg&quot;, dir_from = DIR_POST, ...) {
+    ..file_copy(file_from = file_from, file_to = file_to, dir_from = dir_from, ...)
+  }
+.file_copy(&quot;viz_top_n-1.png&quot;)
+.file_copy(&quot;viz_sentiments-1.png&quot;)
+.file_copy_rename(&quot;viz_sentiments-1.png&quot;)</code></pre>
